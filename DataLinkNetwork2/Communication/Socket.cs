@@ -12,13 +12,13 @@ namespace DataLinkNetwork2.Communication
 {
     public class Socket : ISocket
     {
-        public MiddlewareBuffer _sendBuffer;
-        public MiddlewareBuffer _receiveBuffer;
+        private MiddlewareBuffer _sendBuffer;
+        private MiddlewareBuffer _receiveBuffer;
 
         private ISocket _pairedSocket;
 
         private bool _connected;
-        private Mutex _connectedMutex;
+        private readonly Mutex _connectedMutex;
 
         public event Action Connected;
         public event Action Disconnected;
@@ -28,15 +28,15 @@ namespace DataLinkNetwork2.Communication
         public event Action StartedSending;
         public event Action StartedReceiving;
 
-        private Queue<byte[]> _sendQueue;
+        private readonly Queue<byte[]> _sendQueue;
 
-        private AutoResetEvent _sendBarrier;
+        private readonly AutoResetEvent _sendBarrier;
 
         private Thread _sendThread;
         private Thread _receiveThread;
 
         private volatile bool _terminate;
-        
+
         public Socket()
         {
             _connectedMutex = new();
@@ -44,11 +44,15 @@ namespace DataLinkNetwork2.Communication
             _sendQueue = new();
         }
 
+        /// <summary>
+        /// This is a send thread routine, waits and sends data from _sendQueue
+        /// </summary>
         private void SendRoutine()
         {
             StartedSending?.Invoke();
             while (!_terminate)
             {
+                // When all packets are sent, thread waits for new signal with AutoResetEvent
                 _sendBarrier.WaitOne();
                 while (_sendQueue.Count > 0)
                 {
@@ -57,26 +61,31 @@ namespace DataLinkNetwork2.Communication
             }
         }
 
+        /// <summary>
+        /// Single Packet Send 
+        /// </summary>
+        /// <param name="array">Packet Data Array</param>
         private void PerformSend(byte[] array)
         {
-            //Console.WriteLine("PerformSend");
-            BitArray data = new BitArray(array).BitStaff();
+            // BitStaff all data and split to frame size
+            var data = new BitArray(array).BitStaff();
 
             var arrays = data.Split(C.MaxFrameDataSize);
 
             for (var index = 0; index < arrays.Count; index++)
             {
                 var dataBits = arrays[index];
-                BitArray addressBits = new BitArray(C.AddressSize);
-                BitArray controlBits = new BitArray(C.ControlSize);
-                BitArrayWriter writer = new BitArrayWriter(controlBits);
-                var controlBytes = new byte[] {(byte)(index & 0xFF), 0};
-                writer.Write(new BitArray(controlBytes));
+                var addressBits = new BitArray(C.AddressSize);
+                var controlBits = new BitArray(C.ControlSize);
+                var controlBitsWriter = new BitArrayWriter(controlBits);
 
-                Frame frame = new Frame(dataBits, addressBits, controlBits);
+                // First byte is a frame id, second is control flag
+                var controlBytes = new byte[] {(byte)(index & 0xFF), 0};
+                controlBitsWriter.Write(new BitArray(controlBytes));
+
+                var frame = new Frame(dataBits, addressBits, controlBits);
 
                 var bitArray = frame.Build();
-                //Console.WriteLine($"Sending Frame {index}");
 
                 bool result = InternalSendFrame(bitArray, 0);
                 if (!result)
@@ -85,26 +94,36 @@ namespace DataLinkNetwork2.Communication
                 }
             }
 
+            // Send End Control Frame
             InternalSendEnd();
         }
 
+        /// <summary>
+        /// Small util method, which sends frame with end (0x11) control bits
+        /// </summary>
+        /// <returns></returns>
         private bool InternalSendEnd()
         {
             //Console.WriteLine("InternalSendEnd");
-            BitArray endAddressBits = new BitArray(C.AddressSize);
-            BitArray endControlBits = new BitArray(C.ControlSize);
-            BitArrayWriter endControlBitsWriter = new BitArrayWriter(endControlBits);
+            var endAddressBits = new BitArray(C.AddressSize);
+            var endControlBits = new BitArray(C.ControlSize);
+            var endControlBitsWriter = new BitArrayWriter(endControlBits);
             endControlBitsWriter.Write(new BitArray(new byte[] {0, 0x11}));
-            Frame endFrame = new Frame(new BitArray(0), endAddressBits, endControlBits);
+            var endFrame = new Frame(new BitArray(0), endAddressBits, endControlBits);
 
             var endFrameBits = endFrame.Build();
-            //Console.WriteLine("Sending End");
+
             return InternalSendFrame(endFrameBits, 0);
         }
 
+        /// <summary>
+        /// Recursive method, which attempts to send an encoded frame for 3 times
+        /// </summary>
+        /// <param name="frameBits">Encoded (Built) Frame</param>
+        /// <param name="tried">Amount of tries, should be 0 for first invocation</param>
+        /// <returns>Result of a send (either true or false)</returns>
         private bool InternalSendFrame(BitArray frameBits, int tried)
         {
-            //Console.WriteLine("InternalSendFrame");
             _sendBuffer.Acquire();
             _sendBuffer.Push(frameBits);
             _sendBuffer.Release();
@@ -119,12 +138,14 @@ namespace DataLinkNetwork2.Communication
             }
             else if (lastReceiveStatus == -1)
             {
+                // Receiver returned a failed flag, retry send
                 _sendBuffer.ResetStatus();
                 if (tried == 3)
                 {
                     return false;
                 }
 
+                // Recursively send this frame again
                 var result = InternalSendFrame(frameBits, tried + 1);
                 return result;
             }
@@ -132,12 +153,15 @@ namespace DataLinkNetwork2.Communication
             return false;
         }
 
+        /// <summary>
+        /// Small utility for awaiting a status code from receiver
+        /// </summary>
+        /// <returns>Status code from receiver</returns>
         private int AwaitStatusCode()
         {
-            //Console.WriteLine("AwaitStatusCode");
             var stopwatch = Stopwatch.StartNew();
 
-            int lastReceiveStatus = 0;
+            var lastReceiveStatus = 0;
 
             while (lastReceiveStatus == 0)
             {
@@ -153,24 +177,29 @@ namespace DataLinkNetwork2.Communication
 
                     Thread.Sleep(10);
                 }
-                else
-                {
-                }
             }
 
             return lastReceiveStatus;
         }
 
+        /// <summary>
+        /// Receive Thread Routine, which checks for available data and invokes a Received event
+        /// </summary>
         private void ReceiveRoutine()
         {
             StartedReceiving?.Invoke();
             while (!_terminate)
             {
+                // If something is available
                 if (_receiveBuffer.HasAvailable())
                 {
-                    var bytes = InternalReceive();
+                    // Receive while available
+                    while (_receiveBuffer.HasAvailable())
+                    {
+                        var bytes = InternalReceive();
 
-                    Received?.Invoke(bytes);
+                        Received?.Invoke(bytes);
+                    }
                 }
                 else
                 {
@@ -179,38 +208,46 @@ namespace DataLinkNetwork2.Communication
             }
         }
 
+        /// <summary>
+        /// Receive job
+        /// </summary>
+        /// <returns></returns>
         private byte[] InternalReceive()
         {
-            //Console.WriteLine("InternalReceive");
+            // Don't allow a disconnection, while receive is in progress
             _connectedMutex.WaitOne();
-            Dictionary<int, byte[]> framedBytes = new();
+            var framedBytes = new Dictionary<int, byte[]>();
 
-            int lastReceived = -1;
+            var lastReceived = -1;
 
-            bool receivedEnd = false;
+            var receivedEnd = false;
 
             while (!receivedEnd)
             {
+                // If for some reason, there is no data, but we didn't receive an end frame, wait for data
                 while (!_receiveBuffer.HasAvailable())
                 {
                     Thread.Sleep(10);
                 }
-
-                //Console.WriteLine("Receiving Frame");
+                
+                // Receive and parse a frame
                 var bitArray = InternalReceiveFrame();
-                //Console.WriteLine("Received Frame");
                 var frame = Frame.Parse(bitArray);
-                BitArrayReader controlReader = new BitArrayReader(frame.Control);
+                
+                // Read and process control bits
+                var controlReader = new BitArrayReader(frame.Control);
                 var controlBytes = controlReader.Read(16).ToByteArray();
-                byte frameId = controlBytes[0];
+                var frameId = controlBytes[0];
                 receivedEnd = controlBytes[1] == 0x11;
 
+                // If this is a End Frame - break
                 if (receivedEnd)
                 {
                     _receiveBuffer.SetStatusCode(1);
                     break;
                 }
 
+                // If frame was not yet received, and it's id is not maxed (loop id over 255)
                 if (lastReceived != byte.MaxValue && frameId <= lastReceived)
                 {
                     _receiveBuffer.SetStatusCode(1);
@@ -219,6 +256,8 @@ namespace DataLinkNetwork2.Communication
                 {
                     lastReceived = frameId;
 
+                    // Check for checksum integrity
+                    
                     var checksum = new VerticalOddityChecksumBuilder().Build(frame.Data);
                     if (frame.Checksum.IsSameNoCopy(checksum, 0, 0, C.ChecksumSize))
                     {
@@ -232,21 +271,19 @@ namespace DataLinkNetwork2.Communication
                 }
             }
 
-            Thread.Sleep(50);
-
             var total = framedBytes.OrderBy(f => f.Key).SelectMany(b => b.Value).ToList();
-            // if (_receiveBuffer.HasAvailable())
-            // {
-            //     total.AddRange(InternalReceive());
-            // }
 
+            // Release connection locker, so a disconnect can be performed
             _connectedMutex.ReleaseMutex();
             return total.ToArray();
         }
 
+        /// <summary>
+        /// Small utility, to receive a single frame from _receiveBuffer
+        /// </summary>
+        /// <returns>Frame Bits</returns>
         private BitArray InternalReceiveFrame()
         {
-            //Console.WriteLine("InternalReceiveFrame");
             _receiveBuffer.Acquire();
             var bitArray = _receiveBuffer.Get();
             _receiveBuffer.Release();
@@ -254,16 +291,26 @@ namespace DataLinkNetwork2.Communication
             return bitArray;
         }
 
+        /// <summary>
+        /// <para>Top level Interface, to send data</para>
+        /// <para>Actually enqueues array for later background processing</para>
+        /// </summary>
+        /// <param name="array"></param>
         public void Send(byte[] array)
         {
             _sendQueue.Enqueue(array);
 
+            // If we added a frame, while send thread was sleepy, invoke it
             if (_sendQueue.Count == 1)
             {
                 _sendBarrier.Set();
             }
         }
 
+        /// <summary>
+        /// Connects this socket to another
+        /// </summary>
+        /// <param name="socket"></param>
         public void Connect(ISocket socket)
         {
             if (!_connected)
@@ -283,17 +330,26 @@ namespace DataLinkNetwork2.Communication
             }
         }
 
+        /// <summary>
+        /// Disconnects socket from connected one
+        /// </summary>
         public void Disconnect()
         {
             if (_connected)
             {
+                _connectedMutex.WaitOne();
                 _pairedSocket.AcceptDisconnect();
                 _connected = false;
                 _terminate = true;
                 Disconnected?.Invoke();
+                _connectedMutex.ReleaseMutex();
             }
         }
 
+        /// <summary>
+        /// Accepts a connection and returns 2 buffers, first is send, second is receive (inverse order)
+        /// </summary>
+        /// <returns></returns>
         public (MiddlewareBuffer, MiddlewareBuffer) AcceptConnect(ISocket socket)
         {
             _connectedMutex.WaitOne();
@@ -304,7 +360,7 @@ namespace DataLinkNetwork2.Communication
             _pairedSocket = socket;
 
             _terminate = false;
-            
+
             _sendThread = new Thread(SendRoutine);
             _sendThread.Start();
             _receiveThread = new Thread(ReceiveRoutine);
@@ -317,6 +373,9 @@ namespace DataLinkNetwork2.Communication
             return (_receiveBuffer, _sendBuffer);
         }
 
+        /// <summary>
+        /// Accepts disconnection request
+        /// </summary>
         public void AcceptDisconnect()
         {
             _connectedMutex.WaitOne();
