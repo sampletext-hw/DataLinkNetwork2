@@ -10,7 +10,7 @@ namespace DataLinkNetwork2.Communication
         private readonly Queue<BitArray> _dataQueue;
         private int _lastReceiveStatusCode;
 
-        private Mutex _acquireMutex;
+        private readonly Mutex _acquireMutex;
 
         public MiddlewareBuffer()
         {

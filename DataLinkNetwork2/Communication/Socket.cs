@@ -12,14 +12,18 @@ namespace DataLinkNetwork2.Communication
 {
     public class Socket : ISocket
     {
+        // Two buffers for data transmition
         private MiddlewareBuffer _sendBuffer;
         private MiddlewareBuffer _receiveBuffer;
 
+        // Paired Socket
         private ISocket _pairedSocket;
 
+        // Flag of connection, and it's locker
         private bool _connected;
         private readonly Mutex _connectedMutex;
 
+        // Events
         public event Action Connected;
         public event Action Disconnected;
 
@@ -28,13 +32,17 @@ namespace DataLinkNetwork2.Communication
         public event Action StartedSending;
         public event Action StartedReceiving;
 
+        // Queued packets for send
         private readonly Queue<byte[]> _sendQueue;
 
+        // Small send barrier, so send thread wouldn't loop itself till death
         private readonly AutoResetEvent _sendBarrier;
 
+        // 2 background routine threads
         private Thread _sendThread;
         private Thread _receiveThread;
 
+        // Flag, indicating, whether we should terminate background tasks
         private volatile bool _terminate;
 
         public Socket()
@@ -56,7 +64,9 @@ namespace DataLinkNetwork2.Communication
                 _sendBarrier.WaitOne();
                 while (_sendQueue.Count > 0)
                 {
-                    PerformSend(_sendQueue.Dequeue());
+                    var result = PerformSend(_sendQueue.Dequeue());
+
+                    // Console.WriteLine("Sent");
                 }
             }
         }
@@ -65,7 +75,7 @@ namespace DataLinkNetwork2.Communication
         /// Single Packet Send 
         /// </summary>
         /// <param name="array">Packet Data Array</param>
-        private void PerformSend(byte[] array)
+        private bool PerformSend(byte[] array)
         {
             // BitStaff all data and split to frame size
             var data = new BitArray(array).BitStaff();
@@ -87,21 +97,20 @@ namespace DataLinkNetwork2.Communication
 
                 var bitArray = frame.Build();
 
-                bool result = InternalSendFrame(bitArray, 0);
+                var result = InternalSendFrame(bitArray, 0);
                 if (!result)
                 {
-                    return;
+                    return false;
                 }
             }
 
             // Send End Control Frame
-            InternalSendEnd();
+            return InternalSendEnd();
         }
 
         /// <summary>
         /// Small util method, which sends frame with end (0x11) control bits
         /// </summary>
-        /// <returns></returns>
         private bool InternalSendEnd()
         {
             //Console.WriteLine("InternalSendEnd");
@@ -222,6 +231,8 @@ namespace DataLinkNetwork2.Communication
 
             var receivedEnd = false;
 
+            // It's actually changing inside, dumb Resharper!
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalse
             while (!receivedEnd)
             {
                 // If for some reason, there is no data, but we didn't receive an end frame, wait for data
