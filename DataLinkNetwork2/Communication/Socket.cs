@@ -87,11 +87,10 @@ namespace DataLinkNetwork2.Communication
                 var dataBits = arrays[index];
                 var addressBits = new BitArray(C.AddressSize);
                 var controlBits = new BitArray(C.ControlSize);
-                var controlBitsWriter = new BitArrayWriter(controlBits);
-
+               
                 // First byte is a frame id, second is control flag
                 var controlBytes = new byte[] {(byte)(index & 0xFF), 0};
-                controlBitsWriter.Write(new BitArray(controlBytes));
+                controlBits.Writer().Write(new BitArray(controlBytes));
 
                 var frame = new Frame(dataBits, addressBits, controlBits);
 
@@ -246,8 +245,7 @@ namespace DataLinkNetwork2.Communication
                 var frame = Frame.Parse(bitArray);
                 
                 // Read and process control bits
-                var controlReader = new BitArrayReader(frame.Control);
-                var controlBytes = controlReader.Read(16).ToByteArray();
+                var controlBytes = frame.Control.Reader().Read(16).ToByteArray();
                 var frameId = controlBytes[0];
                 receivedEnd = controlBytes[1] == 0x11;
 

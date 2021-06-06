@@ -69,6 +69,10 @@ namespace DataLinkNetwork2.BitArrayRoutine
                 {
                     ones++;
                 }
+                else
+                {
+                    ones = 0;
+                }
 
                 if (ones == 5)
                 {
@@ -98,7 +102,7 @@ namespace DataLinkNetwork2.BitArrayRoutine
                         result[position++] = false;
                         ones = 0;
                     }
-                
+
                     result[position++] = data[i];
                 }
 
@@ -107,7 +111,7 @@ namespace DataLinkNetwork2.BitArrayRoutine
 
             return data;
         }
-        
+
         public static BitArray DeBitStaff(this BitArray data)
         {
             int ones = 0;
@@ -136,28 +140,32 @@ namespace DataLinkNetwork2.BitArrayRoutine
                 BitArray result = new BitArray(data.Length - extraBits);
 
                 int position = 0;
-                for (var i = 0; i < data.Length; i++)
+                for (var i = 0; i < data.Count; i++)
                 {
                     if (data[i])
                     {
                         ones++;
                     }
-
+                    else
+                    {
+                        ones = 0;
+                    }
+                    
                     if (ones == 5)
                     {
-                        position++;
                         ones = 0;
+                        continue;
                     }
 
                     result[position++] = data[i];
                 }
-
+                
                 return result;
             }
 
             return data;
         }
-        
+
         public static List<BitArray> Split(this BitArray array, int maxSize)
         {
             List<BitArray> parts = new();
@@ -175,6 +183,16 @@ namespace DataLinkNetwork2.BitArrayRoutine
             }
 
             return parts;
+        }
+
+        public static BitArrayReader Reader(this BitArray bitArray)
+        {
+            return new(bitArray);
+        }
+        
+        public static BitArrayWriter Writer(this BitArray bitArray)
+        {
+            return new(bitArray);
         }
     }
 }
