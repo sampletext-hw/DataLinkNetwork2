@@ -1,6 +1,6 @@
 ﻿namespace DataLinkNetwork2
 {
-    public enum Response
+    public enum ResponseStatus
     {
         Undefined, // Неизвестен или не получен
         RR, // Receiver Ready

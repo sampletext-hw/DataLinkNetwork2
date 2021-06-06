@@ -42,6 +42,13 @@ namespace DataLinkNetwork2
             Control = control;
         }
 
+        public byte Id => Control.Read();
+        
+        public byte ControlFlag => Control.Read(8);
+
+        public bool IsStart => ControlFlag == 1;
+        public bool IsEnd => ControlFlag == 2;
+
         public BitArray Build()
         {
             Checksum = new VerticalOddityChecksumBuilder().Build(Data);
@@ -66,6 +73,16 @@ namespace DataLinkNetwork2
             writer.Write(Flag);
 
             return frameArray;
+        }
+
+        public static BitArray BuildFirstFrame()
+        {
+            return new Frame(new BitArray(0), new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 1)).Build();
+        }
+        
+        public static BitArray BuildEndFrame()
+        {
+            return new Frame(new BitArray(0), new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 2)).Build();
         }
 
         public static Frame Parse(BitArray rawBits)

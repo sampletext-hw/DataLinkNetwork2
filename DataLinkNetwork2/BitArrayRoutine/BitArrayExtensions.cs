@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 
@@ -150,7 +151,7 @@ namespace DataLinkNetwork2.BitArrayRoutine
                     {
                         ones = 0;
                     }
-                    
+
                     if (ones == 5)
                     {
                         ones = 0;
@@ -159,7 +160,7 @@ namespace DataLinkNetwork2.BitArrayRoutine
 
                     result[position++] = data[i];
                 }
-                
+
                 return result;
             }
 
@@ -189,10 +190,21 @@ namespace DataLinkNetwork2.BitArrayRoutine
         {
             return new(bitArray, position);
         }
-        
+
         public static BitArrayWriter Writer(this BitArray bitArray, int position = 0)
         {
             return new(bitArray, position);
+        }
+
+        public static BitArray Write(this BitArray array, int offset, byte value)
+        {
+            array.Writer(offset).Write(new BitArray(new[] {value}));
+            return array;
+        }
+        
+        public static byte Read(this BitArray array, int offset = 0)
+        {
+            return array.Reader(offset).Read(8).ToByteArray()[0];
         }
     }
 }

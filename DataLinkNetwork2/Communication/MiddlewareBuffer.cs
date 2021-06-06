@@ -8,7 +8,9 @@ namespace DataLinkNetwork2.Communication
     {
         private readonly Queue<BitArray> _dataQueue;
 
-        private Response _response;
+        private ResponseStatus _responseStatus;
+
+        private int _srejCount = 0;
 
         private readonly Mutex _acquireMutex;
 
@@ -27,7 +29,7 @@ namespace DataLinkNetwork2.Communication
         {
             _acquireMutex.WaitOne();
         }
-        
+
         public void Release()
         {
             _acquireMutex.ReleaseMutex();
@@ -38,25 +40,35 @@ namespace DataLinkNetwork2.Communication
             var bitArray = _dataQueue.Dequeue();
             return bitArray;
         }
-        
+
         public void Push(BitArray data)
         {
             _dataQueue.Enqueue(data);
         }
 
-        public void SetResponse(Response response)
+        public void SetResponseStatus(ResponseStatus responseStatus)
         {
-            _response = response;
-        }
-        
-        public Response GetStatusCode()
-        {
-            return _response;
+            _responseStatus = responseStatus;
         }
 
-        public void ResetStatus()
+        public void SetSrejCount(int count)
         {
-            _response = Response.Undefined;
+            _srejCount = count;
+        }
+        
+        public int GetSrejCount()
+        {
+            return _srejCount;
+        }
+
+        public ResponseStatus GetResponseStatus()
+        {
+            return _responseStatus;
+        }
+
+        public void ResetResponseStatus()
+        {
+            _responseStatus = ResponseStatus.Undefined;
         }
     }
 }

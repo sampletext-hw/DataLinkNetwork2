@@ -92,8 +92,8 @@ namespace DataLinkNetwork2
 
         public static void Test5()
         {
-            ISocket socket1 = new Socket();
-            ISocket socket2 = new Socket();
+            ISocket socket1 = new Socket("Socket1");
+            ISocket socket2 = new Socket("Socket2");
 
             socket1.Connected += () => { Console.WriteLine("Socket1: Connected"); };
             socket2.Connected += () => { Console.WriteLine("Socket2: Connected"); };
