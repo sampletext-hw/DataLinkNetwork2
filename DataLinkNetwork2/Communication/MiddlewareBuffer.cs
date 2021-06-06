@@ -1,20 +1,20 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
-using DataLinkNetwork2.Abstractions;
 
 namespace DataLinkNetwork2.Communication
 {
     public class MiddlewareBuffer
     {
         private readonly Queue<BitArray> _dataQueue;
-        private int _lastReceiveStatusCode;
+
+        private Response _response;
 
         private readonly Mutex _acquireMutex;
 
         public MiddlewareBuffer()
         {
-            _acquireMutex = new(false);
+            _acquireMutex = new();
             _dataQueue = new Queue<BitArray>();
         }
 
@@ -44,19 +44,19 @@ namespace DataLinkNetwork2.Communication
             _dataQueue.Enqueue(data);
         }
 
-        public void SetStatusCode(int statusCode)
+        public void SetResponse(Response response)
         {
-            _lastReceiveStatusCode = statusCode;
+            _response = response;
         }
         
-        public int GetStatusCode()
+        public Response GetStatusCode()
         {
-            return _lastReceiveStatusCode;
+            return _response;
         }
 
         public void ResetStatus()
         {
-            _lastReceiveStatusCode = 0;
+            _response = Response.Undefined;
         }
     }
 }

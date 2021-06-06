@@ -136,17 +136,17 @@ namespace DataLinkNetwork2.Communication
             _sendBuffer.Push(frameBits);
             _sendBuffer.Release();
 
-            var lastReceiveStatus = AwaitStatusCode();
+            var lastResponse = AwaitResponse();
 
-            if (lastReceiveStatus == 1)
+            if (lastResponse == Response.RR)
             {
                 // Everything is OK
                 _sendBuffer.ResetStatus();
                 return true;
             }
-            else if (lastReceiveStatus == -1)
+            else if (lastResponse == Response.REJ || lastResponse == Response.RNR)
             {
-                // Receiver returned a failed flag, retry send
+                // Receiver returned a REJ flag, retry send
                 _sendBuffer.ResetStatus();
                 if (tried == 3)
                 {
@@ -165,11 +165,11 @@ namespace DataLinkNetwork2.Communication
         /// Small utility for awaiting a status code from receiver
         /// </summary>
         /// <returns>Status code from receiver</returns>
-        private int AwaitStatusCode()
+        private Response AwaitResponse()
         {
             var stopwatch = Stopwatch.StartNew();
 
-            var lastReceiveStatus = 0;
+            var lastReceiveStatus = Response.Undefined;
 
             while (lastReceiveStatus == 0)
             {
@@ -179,7 +179,7 @@ namespace DataLinkNetwork2.Communication
                     if (stopwatch.ElapsedMilliseconds > C.SendTimeoutMilliseconds)
                     {
                         stopwatch.Stop();
-                        lastReceiveStatus = -1;
+                        lastReceiveStatus = Response.REJ;
                         break;
                     }
 
@@ -252,14 +252,14 @@ namespace DataLinkNetwork2.Communication
                 // If this is a End Frame - break
                 if (receivedEnd)
                 {
-                    _receiveBuffer.SetStatusCode(1);
+                    _receiveBuffer.SetResponse(Response.RR);
                     break;
                 }
 
                 // If frame was not yet received, and it's id is not maxed (loop id over 255)
                 if (lastReceived != byte.MaxValue && frameId <= lastReceived)
                 {
-                    _receiveBuffer.SetStatusCode(1);
+                    _receiveBuffer.SetResponse(Response.RR);
                 }
                 else
                 {
@@ -270,12 +270,12 @@ namespace DataLinkNetwork2.Communication
                     var checksum = new VerticalOddityChecksumBuilder().Build(frame.Data);
                     if (frame.Checksum.IsSameNoCopy(checksum, 0, 0, C.ChecksumSize))
                     {
-                        _receiveBuffer.SetStatusCode(1);
+                        _receiveBuffer.SetResponse(Response.RR);
                         framedBytes.Add(frameId, frame.Data.DeBitStaff().ToByteArray());
                     }
                     else
                     {
-                        _receiveBuffer.SetStatusCode(-1);
+                        _receiveBuffer.SetResponse(Response.REJ);
                     }
                 }
             }

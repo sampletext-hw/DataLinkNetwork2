@@ -185,14 +185,14 @@ namespace DataLinkNetwork2.BitArrayRoutine
             return parts;
         }
 
-        public static BitArrayReader Reader(this BitArray bitArray)
+        public static BitArrayReader Reader(this BitArray bitArray, int position = 0)
         {
-            return new(bitArray);
+            return new(bitArray, position);
         }
         
-        public static BitArrayWriter Writer(this BitArray bitArray)
+        public static BitArrayWriter Writer(this BitArray bitArray, int position = 0)
         {
-            return new(bitArray);
+            return new(bitArray, position);
         }
     }
 }

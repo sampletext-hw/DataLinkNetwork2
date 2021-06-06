@@ -56,7 +56,7 @@ namespace DataLinkNetwork2
 
             BitArray frameArray = new BitArray(frameSize);
 
-            var writer = new BitArrayWriter(frameArray);
+            var writer = frameArray.Writer();
 
             writer.Write(Flag);
             writer.Write(Address);
@@ -85,7 +85,7 @@ namespace DataLinkNetwork2
                 throw new ArgumentException($"{nameof(rawBits)} doesn't contain second Flag");
             }
 
-            BitArrayReader reader = new BitArrayReader(rawBits, startFlagPosition);
+            BitArrayReader reader = rawBits.Reader(startFlagPosition);
 
             reader.Read(C.FlagSize);
             var addressBits = reader.Read(C.AddressSize);
@@ -97,7 +97,7 @@ namespace DataLinkNetwork2
             var checksumBits = reader.Read(C.ChecksumSize);
             reader.Adjust(-C.ChecksumSize - checksumStartPosition + currentReaderPosition);
             var dataBits = reader.Read(checksumStartPosition - currentReaderPosition);
-            
+
             return new Frame(dataBits, addressBits, controlBits) {Checksum = checksumBits};
         }
 
