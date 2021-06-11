@@ -39,7 +39,7 @@ namespace DataLinkNetwork2.Communication
 
         // Small send barrier, so send thread wouldn't loop itself till death
         private readonly AutoResetEvent _sendBarrier;
-        
+
         // 2 background routine threads
         private Thread _sendThread;
         private Thread _receiveThread;
@@ -91,7 +91,7 @@ namespace DataLinkNetwork2.Communication
             }
 
             Console.WriteLine($"{_title}: Receiver Ready");
-            
+
             _sendBuffer.ResetResponseStatus();
 
             // BitStaff all data and split to frame size
@@ -136,6 +136,7 @@ namespace DataLinkNetwork2.Communication
                 while (!sendSuccessful)
                 {
                     _sendBuffer.Acquire();
+                    _sendBuffer.ResetResponseStatus();
                     for (int i = 0; i < windowedBitArrays.Count; i++)
                     {
                         var dataBits = windowedBitArrays[i];
@@ -154,7 +155,17 @@ namespace DataLinkNetwork2.Communication
                         _sendBuffer.Push(frameBits);
                     }
 
-                    _sendBuffer.ResetResponseStatus();
+                    BitArray resultingChecksum = new BitArray(C.ChecksumSize);
+                    for (int i = 0; i < windowedBitArrays.Count; i++)
+                    {
+                        var dataBits = windowedBitArrays[i];
+                        var checksumBuilder = new VerticalOddityChecksumBuilder();
+
+                        var checksum = checksumBuilder.Build(dataBits);
+                        resultingChecksum.Xor(checksum);
+                    }
+
+                    _sendBuffer.Push(Frame.BuildControlFrame(resultingChecksum));
                     _sendBuffer.Release();
 
                     var responseStatus = AwaitResponse();
@@ -201,7 +212,7 @@ namespace DataLinkNetwork2.Communication
                             break;
                         }
                     }
-                    
+
                     _sendBuffer.ResetResponseStatus();
                 }
             }
@@ -234,7 +245,7 @@ namespace DataLinkNetwork2.Communication
             while (lastReceiveStatus == ResponseStatus.Undefined)
             {
                 lastReceiveStatus = _sendBuffer.GetResponseStatus();
-                
+
                 if (lastReceiveStatus == ResponseStatus.Undefined)
                 {
                     if (stopwatch.ElapsedMilliseconds > C.SendTimeoutMilliseconds)
@@ -326,11 +337,16 @@ namespace DataLinkNetwork2.Communication
 
                 _receiveBuffer.Release();
 
+                BitArray resultingChecksum = new BitArray(C.ChecksumSize);
+                var checksumBuilder = new VerticalOddityChecksumBuilder();
+
+                bool success = true;
                 for (var i = 0; i < bufferedBitArrays.Count; i++)
                 {
                     try
                     {
                         var frame = Frame.Parse(bufferedBitArrays[i]);
+                        resultingChecksum.Xor(checksumBuilder.Build(frame.Data));
 
                         if (frame.IsEnd)
                         {
@@ -339,19 +355,40 @@ namespace DataLinkNetwork2.Communication
                             _receiveBuffer.SetResponseStatus(ResponseStatus.RR);
                             break;
                         }
+                        else if (frame.IsControl)
+                        {
+                            var controlChecksum = frame.Data;
+                            if (resultingChecksum.IsSameNoCopy(controlChecksum, 0, 0, C.ChecksumSize))
+                            {
+                                // Everything is fine
+                                break;
+                            }
+                            else
+                            {
+                                _receiveBuffer.SetResponseStatus(ResponseStatus.REJ);
+                                break;
+                            }
+                        }
 
                         Random random = new Random(DateTime.Now.Millisecond);
 
                         if (random.Next(0, 1000) > 800)
                         {
                             // 1/5 is RNR)
-                                
+
                             _receiveBuffer.SetResponseStatus(ResponseStatus.RNR);
                             Thread.Sleep(100);
                             _receiveBuffer.SetResponseStatus(ResponseStatus.RR);
+                            Thread.Sleep(100);
                             break;
                         }
-                            
+                        else if (random.Next(0, 1000) > 950)
+                        {
+                            // 5% collision
+                            // invert one bit
+                            bufferedBitArrays[i][random.Next(0, bufferedBitArrays[i].Length)] ^= true;
+                        }
+
                         var dataChecksum = new VerticalOddityChecksumBuilder().Build(frame.Data);
                         var receivedChecksum = frame.Checksum;
                         if (receivedChecksum.IsSameNoCopy(dataChecksum, 0, 0, C.ChecksumSize))

@@ -114,12 +114,12 @@ namespace DataLinkNetwork2
 
             // socket1.Send(Encoding.UTF8.GetBytes($"Test message"));
 
-            for (int i = 0; i < 30; i++)
+            for (int i = 0; i < 3; i++)
             {
                 socket1.Send(Encoding.UTF8.GetBytes($"Test message {i}"));
             }
             
-            for (int i = 0; i < 30; i++)
+            for (int i = 0; i < 3; i++)
             {
                 socket2.Send(Encoding.UTF8.GetBytes($"Test message {i}"));
             }

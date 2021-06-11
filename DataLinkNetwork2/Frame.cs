@@ -43,11 +43,12 @@ namespace DataLinkNetwork2
         }
 
         public byte Id => Control.Read();
-        
+
         public byte ControlFlag => Control.Read(8);
 
-        public bool IsStart => ControlFlag == 1;
-        public bool IsEnd => ControlFlag == 2;
+        public bool IsStart => ControlFlag >> 1 == 1;
+        public bool IsEnd => ControlFlag >> 2 == 1;
+        public bool IsControl => ControlFlag >> 3 == 1;
 
         public BitArray Build()
         {
@@ -77,12 +78,17 @@ namespace DataLinkNetwork2
 
         public static BitArray BuildFirstFrame()
         {
-            return new Frame(new BitArray(0), new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 1)).Build();
+            return new Frame(new BitArray(0), new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 1 << 1)).Build();
         }
-        
+
+        public static BitArray BuildControlFrame(BitArray data)
+        {
+            return new Frame(data, new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 1 << 3)).Build();
+        }
+
         public static BitArray BuildEndFrame()
         {
-            return new Frame(new BitArray(0), new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 2)).Build();
+            return new Frame(new BitArray(0), new BitArray(C.AddressSize), new BitArray(C.ControlSize).Write(8, 1 << 2)).Build();
         }
 
         public static Frame Parse(BitArray rawBits)
